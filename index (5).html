@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mess & Canteen Hub – TIET</title>
+<style>
+:root{--bg:#f4f6f8;--card:#fff;--tx:#1b1f24;--mu:#5f6a75;--bd:#d9dee3;--ac:#c2410c;--acx:#fff;--bad:#c0392b;--ok:#1c7a4a;--st:#e0a100}
+@media(prefers-color-scheme:dark){:root{--bg:#101316;--card:#1a1e23;--tx:#e8ecef;--mu:#9aa5b0;--bd:#2b323a;--ac:#fb923c;--acx:#2a1200;--bad:#ff8a7a;--ok:#6fd3a0;--st:#f5c542}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 "Segoe UI",system-ui,sans-serif}
+header,main{max-width:1000px;margin:0 auto;padding:14px 20px}
+h1{font:700 1.8rem/1.2 Georgia,serif;margin:0}
+h2{font:600 1.05rem Georgia,serif;margin:0 0 8px}
+.sub,small{color:var(--mu)}
+.sub{margin:2px 0 0}
+small{font-size:12px}
+.box{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:14px;margin-bottom:12px}
+.warn{border-color:var(--st);background:color-mix(in srgb,var(--st) 12%,var(--card))}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+button,select,input,textarea{font:inherit;color:var(--tx)}
+button{padding:7px 14px;border-radius:6px;border:1px solid var(--bd);background:var(--card);cursor:pointer}
+button.p,.tabs button[aria-pressed=true]{background:var(--ac);color:var(--acx);border-color:var(--ac);font-weight:600}
+select,input,textarea{padding:6px 8px;border-radius:6px;border:1px solid var(--bd);background:var(--bg);max-width:100%}
+textarea{width:100%;min-height:260px;font:13px/1.45 ui-monospace,Consolas,monospace}
+button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+.now{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;border-left:6px solid var(--ac)}
+.now b{font:700 1.5rem Georgia,serif;display:block}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.meal{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:12px}
+.meal.cur{border-color:var(--ac);box-shadow:0 0 0 2px var(--ac)}
+.meal.done{opacity:.7}
+.chip{font-size:11px;padding:0 8px;border-radius:99px;border:1px solid var(--bd);margin-left:6px}
+.chip.on{border-color:var(--ok);color:var(--ok)}
+.dish{display:flex;justify-content:space-between;font-size:14px;padding:2px 0;border-bottom:1px dashed var(--bd)}
+.dish small{color:var(--st)}
+.stars{display:flex;gap:2px;margin-top:8px;align-items:center}
+.stars button{border:0;background:none;padding:0 2px;font-size:22px;line-height:1;color:var(--bd);cursor:pointer}
+.stars button.on{color:var(--st)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{border:1px solid var(--bd);padding:6px 8px;text-align:left;vertical-align:top}
+tr.today td,tr.today th{background:color-mix(in srgb,var(--ac) 12%,var(--card))}
+.rb{display:grid;grid-template-columns:130px 1fr 40px;gap:8px;align-items:center;font-size:13px;margin-bottom:5px}
+.rb i{display:block;height:12px;border-radius:4px;background:var(--ac)}
+.two{display:grid;gap:12px;grid-template-columns:1fr 1fr}
+@media(max-width:700px){.two{grid-template-columns:1fr}}
+.tg{display:grid;gap:6px;grid-template-columns:90px 1fr 1fr;align-items:center;margin-bottom:10px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Mess & Canteen Hub</h1>
+  <p class="sub">What is being served, when, and what students actually think of it. Built for TIET Patiala.</p>
+</header>
+<main>
+  <div id="ph"></div>
+  <div class="bar"><select id="mess" aria-label="Choose mess or canteen"></select>
+    <span class="tabs" id="tabs" style="display:flex;gap:6px;flex-wrap:wrap"></span></div>
+  <div id="view"></div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const ymd=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const MEALS=["Breakfast","Lunch","Snacks","Dinner"],DAYS=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const dayOf=d=>DAYS[(d.getDay()+6)%7];
+const hash=s=>[...s].reduce((a,c)=>(a*31+c.charCodeAt(0))>>>0,7);
+const tmin=s=>{const[a,b]=s.split(":");return +a*60+ +b};
+
+const BASE={
+ Breakfast:["Poha,Tea","Aloo paratha,Curd,Tea","Idli,Sambar,Chutney","Bread omelette,Tea","Chole bhature","Upma,Banana,Tea","Puri bhaji,Tea"],
+ Lunch:["Dal tadka,Jeera rice,Roti,Salad","Rajma,Rice,Roti,Raita","Kadhi pakora,Rice,Roti","Mixed veg,Dal fry,Roti,Rice","Chole,Rice,Roti,Boondi raita","Paneer butter masala,Naan,Rice","Veg biryani,Raita,Papad"],
+ Snacks:["Samosa,Tea","Bread pakora,Tea","Maggi,Tea","Pav bhaji","Veg sandwich,Tea","Biscuits,Tea","Dhokla,Tea"],
+ Dinner:["Aloo gobhi,Dal,Roti,Rice","Paneer curry,Roti,Rice","Egg curry,Roti,Rice","Dal makhani,Naan,Rice","Mix veg,Dal,Roti,Rice,Kheer","Chowmein,Manchurian","Kadhai paneer,Roti,Rice,Gulab jamun"]};
+function build(k,fixed){
+  const menu={};
+  DAYS.forEach((d,i)=>{menu[d]={};MEALS.forEach(m=>menu[d][m]=(fixed?fixed[m]:BASE[m][(i+k)%7]).split(","))});
+  return menu;
+}
+const SAMPLE=()=>{
+  const T={Breakfast:["07:30","09:30"],Lunch:["12:30","14:30"],Snacks:["17:00","18:00"],Dinner:["19:30","21:30"]};
+  const S={tab:"today",sel:"m1",ph:true,rate:{},messes:[
+   {id:"m1",name:"Mess 1 (sample)",timings:T,menu:build(0)},
+   {id:"m2",name:"Mess 2 (sample)",timings:T,menu:build(2)},
+   {id:"c1",name:"Canteen (sample)",timings:{Breakfast:["08:30","11:00"],Lunch:["11:00","15:00"],Snacks:["15:00","18:30"],Dinner:["18:30","21:30"]},
+    menu:build(0,{Breakfast:"Sandwich,Maggi",Lunch:"Thali,Chole kulche",Snacks:"Samosa,Cold coffee",Dinner:"Rolls,Fried rice"})}]};
+  const t=new Date();
+  S.messes.forEach(m=>{for(let i=1;i<=14;i++){const d=new Date(t);d.setDate(t.getDate()-i);const k=ymd(d);
+    MEALS.forEach(ml=>{const ds=m.menu[dayOf(d)][ml].join(",");S.rate[`${m.id}|${k}|${ml}`]=Math.max(1,Math.min(5,2+hash(ds)%3+hash(k+ml)%2))})}});
+  return S;
+};
+let S=SAMPLE();
+try{const x=JSON.parse(localStorage.getItem("mess-v1"));if(x&&x.messes&&x.messes.length)S=x}catch(e){}
+const save=()=>{try{localStorage.setItem("mess-v1",JSON.stringify(S))}catch(e){}};
+const cur=()=>S.messes.find(m=>m.id===S.sel)||S.messes[0];
+
+function dishScores(m){
+  const sc={};
+  Object.entries(S.rate).forEach(([k,v])=>{
+    const[id,date,ml]=k.split("|");if(id!==m.id)return;
+    const dy=dayOf(new Date(date+"T12:00:00")),ds=(m.menu[dy]||{})[ml]||[];
+    ds.forEach(d=>(sc[d]=sc[d]||[]).push(v));
+  });
+  return sc;
+}
+const avg=a=>a.reduce((x,y)=>x+y,0)/a.length;
+
+function nowInfo(m){
+  const d=new Date(),mins=d.getHours()*60+d.getMinutes();
+  for(const ml of MEALS){const[a,b]=m.timings[ml];if(mins>=tmin(a)&&mins<tmin(b))return{meal:ml,state:"serving",left:tmin(b)-mins,tomorrow:false}}
+  for(const ml of MEALS)if(tmin(m.timings[ml][0])>mins)return{meal:ml,state:"next",inMin:tmin(m.timings[ml][0])-mins,tomorrow:false};
+  return{meal:MEALS[0],state:"next",inMin:1440-mins+tmin(m.timings.Breakfast[0]),tomorrow:true};
+}
+const dur=n=>n>=60?`${Math.floor(n/60)} h ${n%60} min`:`${n} min`;
+
+function viewToday(m){
+  const now=new Date(),inf=nowInfo(m),sc=dishScores(m),k=ymd(now),mins=now.getHours()*60+now.getMinutes();
+  const dy=inf.tomorrow?DAYS[(DAYS.indexOf(dayOf(now))+1)%7]:dayOf(now);
+  const showD=m.menu[dy][inf.meal];
+  const ds=d=>sc[d]&&sc[d].length>=2?`<small>★ ${avg(sc[d]).toFixed(1)}</small>`:"";
+  let h=`<div class="box now"><div><small>${inf.state==="serving"?"Serving now":"Up next"}${inf.tomorrow?" (tomorrow)":""}</small><b>${inf.meal}</b><span>${inf.state==="serving"?`Ends in ${dur(inf.left)}`:`Starts in ${dur(inf.inMin)}`} · ${m.timings[inf.meal].join("–")}</span></div><div style="max-width:420px">${showD.map(esc).join(" · ")||"No menu entered"}</div></div><div class="grid">`;
+  MEALS.forEach(ml=>{
+    const[a,b]=m.timings[ml],started=mins>=tmin(a),over=mins>=tmin(b),key=`${m.id}|${k}|${ml}`,r=S.rate[key]||0,live=!inf.tomorrow&&inf.state==="serving"&&inf.meal===ml;
+    h+=`<div class="meal${live?" cur":""}${over?" done":""}"><h2>${ml}${live?'<span class="chip on">now</span>':over?'<span class="chip">done</span>':""}</h2><small>${a}–${b}</small>
+    <div style="margin-top:6px">${(m.menu[dayOf(now)][ml]||[]).map(d=>`<div class="dish"><span>${esc(d)}</span>${ds(d)}</div>`).join("")||"<small>No menu entered</small>"}</div>
+    ${started?`<div class="stars" aria-label="Rate ${ml}">${[1,2,3,4,5].map(n=>`<button data-key="${key}" data-n="${n}" class="${n<=r?"on":""}" aria-label="${n} star${n>1?"s":""}">★</button>`).join("")}<small>${r?"Your rating":"Rate it"}</small></div>`:'<small style="display:block;margin-top:8px">Rating opens when the meal starts</small>'}</div>`;
+  });
+  return h+"</div>";
+}
+
+function viewWeek(m){
+  const t=dayOf(new Date());
+  return `<div class="box" style="overflow-x:auto"><table><tr><th>Day</th>${MEALS.map(x=>`<th>${x}<br><small>${m.timings[x].join("–")}</small></th>`).join("")}</tr>${DAYS.map(d=>`<tr class="${d===t?"today":""}"><th>${d}</th>${MEALS.map(x=>`<td>${m.menu[d][x].map(esc).join(", ")}</td>`).join("")}</tr>`).join("")}</table></div>`;
+}
+
+function viewInsights(m){
+  const sc=dishScores(m),list=Object.entries(sc).filter(e=>e[1].length>=2).map(e=>[e[0],avg(e[1]),e[1].length]).sort((a,b)=>b[1]-a[1]);
+  const byMeal=MEALS.map(ml=>{const v=Object.entries(S.rate).filter(([k])=>k.startsWith(m.id+"|")&&k.endsWith("|"+ml)).map(e=>e[1]);return[ml,v.length?avg(v):0]});
+  const byMess=S.messes.map(x=>{const v=Object.entries(S.rate).filter(([k])=>k.startsWith(x.id+"|")).map(e=>e[1]);return[x.name,v.length?avg(v):0]});
+  const bars=a=>a.map(r=>`<div class="rb"><span>${esc(r[0])}</span><span><i style="width:${r[1]/5*100}%"></i></span><span>${r[1]?r[1].toFixed(1):"–"}</span></div>`).join("");
+  const li=a=>a.length?a.map(d=>`<div class="dish"><span>${esc(d[0])}</span><small>★ ${d[1].toFixed(1)} (${d[2]})</small></div>`).join(""):"<small>Needs more ratings</small>";
+  return `<div class="two"><div class="box"><h2>Best-rated dishes</h2>${li(list.slice(0,6))}</div><div class="box"><h2>Lowest-rated dishes</h2>${li(list.slice(-6).reverse())}</div></div>
+  <div class="two"><div class="box"><h2>Average rating by meal</h2>${bars(byMeal)}</div><div class="box"><h2>Average rating by mess</h2>${bars(byMess)}</div></div>
+  <p class="sub"><small>Dish scores average every rating for meals that included the dish. Ratings are stored on this device only.</small></p>`;
+}
+
+function menuText(m){return DAYS.flatMap(d=>MEALS.map(x=>`${d} | ${x} | ${m.menu[d][x].join(", ")}`)).join("\n")}
+function viewEdit(m){
+  return `<div class="box"><h2>Edit ${esc(m.name)}</h2><div class="bar"><label>Name <input id="nm" value="${esc(m.name)}"></label></div>
+  <h2>Meal timings</h2>${MEALS.map(x=>`<div class="tg"><b>${x}</b><input type="time" data-tm="${x}|0" value="${m.timings[x][0]}" aria-label="${x} start"><input type="time" data-tm="${x}|1" value="${m.timings[x][1]}" aria-label="${x} end"></div>`).join("")}
+  <h2>Weekly menu</h2><small>One line per meal: Day | Meal | dish, dish, dish. Use "All" as the day to repeat a meal daily.</small>
+  <textarea id="mt" spellcheck="false">${esc(menuText(m))}</textarea>
+  <div class="bar" style="margin-top:10px"><button class="p" data-act="save">Save changes</button><button data-act="add">Add mess or canteen</button><button data-act="del">Delete this one</button><button data-act="reset">Reset to sample</button></div></div>`;
+}
+
+function render(){
+  const m=cur();
+  $("mess").innerHTML=S.messes.map(x=>`<option value="${x.id}"${x.id===m.id?" selected":""}>${esc(x.name)}</option>`).join("");
+  $("tabs").innerHTML=[["today","Today"],["week","This week"],["insights","Ratings"],["edit","Edit menu"]].map(t=>`<button data-tab="${t[0]}" aria-pressed="${S.tab===t[0]}">${t[1]}</button>`).join("");
+  $("ph").innerHTML=S.ph?'<div class="box warn"><b>Sample data.</b> These menus, timings and ratings are placeholders. Open <b>Edit menu</b> and enter your real mess menu to replace them.</div>':"";
+  $("view").innerHTML=S.tab==="today"?viewToday(m):S.tab==="week"?viewWeek(m):S.tab==="insights"?viewInsights(m):viewEdit(m);
+}
+
+document.addEventListener("click",e=>{
+  const b=e.target.closest("button");if(!b)return;
+  const d=b.dataset;
+  if(d.tab){S.tab=d.tab;render()}
+  else if(d.key){const cur0=S.rate[d.key];if(cur0===+d.n)delete S.rate[d.key];else S.rate[d.key]=+d.n;save();render()}
+  else if(d.act==="save"){
+    const m=cur();
+    const menu={};DAYS.forEach(x=>{menu[x]={};MEALS.forEach(y=>menu[x][y]=[])});
+    $("mt").value.split("\n").forEach(l=>{
+      const p=l.split("|").map(x=>x.trim());if(p.length<3)return;
+      const dy=p[0].slice(0,3).toLowerCase(),ml=MEALS.find(x=>x.toLowerCase()===p[1].toLowerCase());
+      if(!ml)return;
+      const ds=p[2].split(",").map(x=>x.trim()).filter(Boolean);
+      (dy==="all"?DAYS:DAYS.filter(x=>x.toLowerCase()===dy)).forEach(x=>menu[x][ml]=ds);
+    });
+    const tm={};
+    MEALS.forEach(x=>{const i=document.querySelectorAll(`[data-tm^="${x}|"]`);tm[x]=[i[0].value||m.timings[x][0],i[1].value||m.timings[x][1]]});
+    m.menu=menu;m.timings=tm;m.name=$("nm").value.trim()||m.name;
+    if(S.ph){S.ph=false;S.rate={}}
+    save();S.tab="today";render();
+  }
+  else if(d.act==="add"){const n=prompt("Name of the new mess or canteen?");if(n&&n.trim()){const m=cur(),id="x"+Date.now();S.messes.push({id,name:n.trim(),timings:JSON.parse(JSON.stringify(m.timings)),menu:JSON.parse(JSON.stringify(m.menu))});S.sel=id;S.tab="edit";save();render()}}
+  else if(d.act==="del"){if(S.messes.length>1&&confirm("Delete this mess or canteen and its ratings?")){const id=cur().id;S.messes=S.messes.filter(x=>x.id!==id);Object.keys(S.rate).forEach(k=>{if(k.startsWith(id+"|"))delete S.rate[k]});S.sel=S.messes[0].id;save();render()}}
+  else if(d.act==="reset"){if(confirm("Replace everything with the sample data?")){S=SAMPLE();S.tab="edit";save();render()}}
+});
+$("mess").addEventListener("change",e=>{S.sel=e.target.value;save();render()});
+render();
+setInterval(()=>{if(S.tab==="today")render()},60000);
+</script>
+</body>
+</html>
